@@ -55,7 +55,7 @@ app.include_router(batch_router,      prefix=PREFIX, tags=["Batch"])
 async def root():
     return {
         "status": True,
-        "message": "Otakudesu Scraper API is running",
+        "message": "Otakudesu Scraper API is running By Ozan",
         "docs": "/docs",
     }
 
