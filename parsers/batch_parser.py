@@ -5,15 +5,22 @@ import re
 def parse_batch(html: str) -> dict:
     soup = BeautifulSoup(html, "html.parser")
 
-    title_tag = soup.select_one("h1.entry-title")
+    # Title — try .jdlrx h1 first, then h1.entry-title, then any h1
+    title_tag = (
+        soup.select_one(".jdlrx h1")
+        or soup.select_one("h1.entry-title")
+        or soup.select_one("h1")
+    )
     title = title_tag.get_text(strip=True) if title_tag else ""
 
     download_links = []
 
     # Otakudesu batch page groups links in quality sections
-    for quality_block in soup.select(".batchlink .download ul, .download-eps ul"):
+    for quality_block in soup.select(".download ul"):
         quality_heading = quality_block.find_previous(
-            lambda t: t.name in ("strong", "b", "h3", "h4") and t.get_text(strip=True)
+            lambda t: t.name in ("strong", "b", "h3", "h4", "p")
+            and t.get_text(strip=True)
+            and re.search(r"(360|480|720|1080)", t.get_text(strip=True))
         )
         quality = quality_heading.get_text(strip=True) if quality_heading else "unknown"
 
@@ -31,7 +38,7 @@ def parse_batch(html: str) -> dict:
     # Fallback: parse all download anchors
     if not download_links:
         resolutions: dict = {}
-        for a_tag in soup.select(".batchlink a"):
+        for a_tag in soup.select(".download a, .batchlink a"):
             text = a_tag.get_text(strip=True)
             href = a_tag.get("href", "")
             res_match = re.search(r"(360|480|720|1080)p?", text, re.IGNORECASE)

@@ -9,9 +9,10 @@ venv/
 *.egg-info/
 dist/
 build/
-.git/
-.gitignore
-*.md
 
-# Debug files
-debug/
+# Debug HTML files (large scraped pages)
+debug/html/
+
+# IDE
+.vscode/
+.idea/

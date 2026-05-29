@@ -1,22 +1,37 @@
 from bs4 import BeautifulSoup
 
 
-def _parse_anime_card(item) -> dict:
-    """Parse a single anime card element."""
-    title_tag = item.select_one(".thumb a img")
+def _parse_home_card(item) -> dict:
+    """Parse a single anime card from the homepage .venz section."""
+    # Title from .jdlflm (most reliable)
+    title_tag = item.select_one(".jdlflm")
+    title = title_tag.get_text(strip=True) if title_tag else ""
+
+    # Fallback: try img alt
+    if not title:
+        img_tag = item.select_one(".thumb img")
+        title = img_tag.get("alt", "").strip() if img_tag else ""
+
+    # Link & slug
     link_tag = item.select_one(".thumb a")
-    thumb_tag = item.select_one(".thumb a img")
-    eps_tag = item.select_one(".thumb .epz") or item.select_one(".thumb .epztipe")
-    status_tag = item.select_one(".thumb .epztipe")
-
-    title = title_tag.get("alt", "").strip() if title_tag else ""
     link = link_tag.get("href", "") if link_tag else ""
-    thumb = thumb_tag.get("src", "") if thumb_tag else ""
-    episode = eps_tag.get_text(strip=True) if eps_tag else ""
-    status = status_tag.get_text(strip=True) if status_tag else ""
-
-    # Derive slug from URL  e.g. /anime/naruto/ -> naruto
     slug = link.rstrip("/").split("/")[-1] if link else ""
+
+    # Thumbnail
+    thumb_tag = item.select_one(".thumb img")
+    thumb = thumb_tag.get("src", "") if thumb_tag else ""
+
+    # Episode count (e.g. "Episode 9")
+    eps_tag = item.select_one(".epz")
+    episode = eps_tag.get_text(strip=True) if eps_tag else ""
+
+    # Day or rating (ongoing = day name, completed = score)
+    epztipe_tag = item.select_one(".epztipe")
+    sub_info = epztipe_tag.get_text(strip=True) if epztipe_tag else ""
+
+    # Date
+    date_tag = item.select_one(".newnime")
+    date = date_tag.get_text(strip=True) if date_tag else ""
 
     return {
         "title": title,
@@ -24,25 +39,26 @@ def _parse_anime_card(item) -> dict:
         "url": link,
         "thumb": thumb,
         "episode": episode,
-        "status": status,
+        "sub_info": sub_info,
+        "date": date,
     }
 
 
 def parse_home(html: str) -> dict:
     soup = BeautifulSoup(html, "html.parser")
 
-    # --- Ongoing ---
-    ongoing_section = soup.select_one("#recent-release")
-    ongoing = []
-    if ongoing_section:
-        for item in ongoing_section.select("li"):
-            ongoing.append(_parse_anime_card(item))
+    venz_sections = soup.select(".venz")
 
-    # --- Completed ---
-    completed_section = soup.select_one("#new-anime")
+    # --- Ongoing (first .venz section) ---
+    ongoing = []
+    if len(venz_sections) > 0:
+        for item in venz_sections[0].select("ul li"):
+            ongoing.append(_parse_home_card(item))
+
+    # --- Completed (second .venz section) ---
     completed = []
-    if completed_section:
-        for item in completed_section.select("li"):
-            completed.append(_parse_anime_card(item))
+    if len(venz_sections) > 1:
+        for item in venz_sections[1].select("ul li"):
+            completed.append(_parse_home_card(item))
 
     return {"ongoing": ongoing, "completed": completed}

@@ -6,29 +6,32 @@ def parse_episode(html: str) -> dict:
     soup = BeautifulSoup(html, "html.parser")
 
     # ---------- Basic Info ----------
-    title_tag = soup.select_one("h1.entry-title") or soup.select_one(".episodeTitle")
+    # Primary: .jdlrx h1 (consistent with anime detail page)
+    title_tag = (
+        soup.select_one(".jdlrx h1")
+        or soup.select_one("h1.entry-title")
+        or soup.select_one(".posttl")
+        or soup.select_one("h1")
+    )
     title = title_tag.get_text(strip=True) if title_tag else ""
 
     # ---------- Stream Mirrors (iframes / embed URLs) ----------
     stream_mirrors = []
 
-    # Mirror list typically inside #embed_holder or .mirrorstream
-    mirror_wrapper = soup.select_one("#embed_holder") or soup.select_one(".mirrorstream")
-    if mirror_wrapper:
-        for btn in mirror_wrapper.select("li .mirrorstream, li"):
-            data_content = btn.get("data-content", "")
-            if data_content:
-                # data-content usually contains encoded iframe HTML
-                try:
-                    inner = BeautifulSoup(data_content, "html.parser")
-                    iframe = inner.find("iframe")
-                    if iframe:
-                        stream_mirrors.append({
-                            "server": btn.get_text(strip=True),
-                            "embed_url": iframe.get("src", ""),
-                        })
-                except Exception:
-                    pass
+    # Mirror list — buttons with data-content containing encoded iframe HTML
+    for btn in soup.select(".mirrorstream ul li a"):
+        data_content = btn.get("data-content", "")
+        if data_content:
+            try:
+                inner = BeautifulSoup(data_content, "html.parser")
+                iframe = inner.find("iframe")
+                if iframe:
+                    stream_mirrors.append({
+                        "server": btn.get_text(strip=True),
+                        "embed_url": iframe.get("src", ""),
+                    })
+            except Exception:
+                pass
 
     # Fallback: grab all iframes directly from page
     if not stream_mirrors:
@@ -40,10 +43,12 @@ def parse_episode(html: str) -> dict:
     # ---------- Download Links ----------
     download_links = []
 
-    # Otakudesu groups download by quality blocks (.mirrorstream .download or .download-eps)
-    for quality_block in soup.select(".download-eps ul, .mirrorstream .download ul"):
+    # Otakudesu groups download by quality blocks
+    for quality_block in soup.select(".download ul"):
         quality_tag = quality_block.find_previous(
-            lambda t: t.name in ("strong", "b", "span") and t.get_text(strip=True)
+            lambda t: t.name in ("strong", "b", "span", "p")
+            and t.get_text(strip=True)
+            and re.search(r"(360|480|720|1080)", t.get_text(strip=True))
         )
         quality = quality_tag.get_text(strip=True) if quality_tag else "unknown"
 
@@ -62,7 +67,7 @@ def parse_episode(html: str) -> dict:
     # If structured blocks not found, try simple approach
     if not download_links:
         resolutions = {}
-        for a_tag in soup.select(".mirrordownload a, .download a"):
+        for a_tag in soup.select(".download a"):
             text = a_tag.get_text(strip=True)
             href = a_tag.get("href", "")
             res_match = re.search(r"(360|480|720|1080)p?", text, re.IGNORECASE)
